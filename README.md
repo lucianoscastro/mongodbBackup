@@ -11,16 +11,11 @@ Imagem Docker (~68 MB) que faz o backup periódico de **todas as bases de um clu
 
 ```bash
 cp .env.example .env    # preencha MONGO_URI e, se quiser, o S3
-docker compose up -d
-```
 
-Ou sem compose:
-
-```bash
 docker run -d --name mongo-backup \
+  --restart unless-stopped \
+  --env-file .env \
   -v ./backups:/backups \
-  -e MONGO_URI="mongodb://user:pass@host:27017/?authSource=admin" \
-  -e INTERVAL_HOURS=6 \
   lzcsoftware/mongo-backup:latest
 ```
 
@@ -45,12 +40,14 @@ docker run -d --name mongo-backup \
 
 ## Comandos
 
+Prefixe os comandos abaixo com `docker run --rm --env-file .env -v ./backups:/backups lzcsoftware/mongo-backup:latest`:
+
 ```bash
-docker compose run --rm mongo-backup backup             # backup avulso, fora do ciclo
-docker compose run --rm mongo-backup list               # lista os backups locais
-docker compose run --rm mongo-backup restore loja       # restaura do arquivo local mais recente
-docker compose run --rm mongo-backup restore loja --from-s3
-docker compose run --rm mongo-backup restore loja --drop # apaga as coleções antes de restaurar
+backup             # backup avulso, fora do ciclo
+list               # lista os backups locais
+restore loja       # restaura do arquivo local mais recente
+restore loja --from-s3
+restore loja --drop # apaga as coleções antes de restaurar
 ```
 
 ## Segurança: a credencial do backup não deveria conseguir restaurar
