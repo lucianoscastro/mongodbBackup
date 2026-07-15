@@ -16,7 +16,7 @@ docker run -d --name mongo-backup \
   --restart unless-stopped \
   --env-file .env \
   -v ./backups:/backups \
-  lzcsoftware/mongo-backup:latest
+  lucianoscastro/mongo-backup:latest
 ```
 
 Ou, com um `docker-compose.yml`:
@@ -24,7 +24,7 @@ Ou, com um `docker-compose.yml`:
 ```yaml
 services:
   mongo-backup:
-    image: lzcsoftware/mongo-backup:latest
+    image: lucianoscastro/mongo-backup:latest
     container_name: mongo-backup
     restart: unless-stopped
     env_file: .env
@@ -58,7 +58,7 @@ services:
 
 ## Comandos
 
-Prefixe os comandos abaixo com `docker run --rm --env-file .env -v ./backups:/backups lzcsoftware/mongo-backup:latest`:
+Prefixe os comandos abaixo com `docker run --rm --env-file .env -v ./backups:/backups lucianoscastro/mongo-backup:latest`:
 
 ```bash
 backup             # backup avulso, fora do ciclo
