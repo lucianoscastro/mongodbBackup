@@ -19,6 +19,24 @@ docker run -d --name mongo-backup \
   lzcsoftware/mongo-backup:latest
 ```
 
+Ou, com um `docker-compose.yml`:
+
+```yaml
+services:
+  mongo-backup:
+    image: lzcsoftware/mongo-backup:latest
+    container_name: mongo-backup
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./backups:/backups
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
+```
+
 ## Variáveis
 
 | Variável | Padrão | Descrição |
