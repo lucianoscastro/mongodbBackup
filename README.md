@@ -19,13 +19,13 @@ docker run -d --name db-backup \
   --env-file .env \
   -p 8080:8080 \
   -v ./backups:/backups \
-  lucianoscastro/mongo-backup:latest
+  lucianoscastro/db-backup:latest
 ```
 
 A UI fica em `http://localhost:8080` (usuário `admin` por padrão). Para rodar **sem UI** (sem porta exposta), use o comando `daemon`:
 
 ```bash
-docker run -d ... lucianoscastro/mongo-backup:latest daemon
+docker run -d ... lucianoscastro/db-backup:latest daemon
 ```
 
 Com `docker-compose.yml` (exemplo com SQL Server no mesmo host):
@@ -33,7 +33,7 @@ Com `docker-compose.yml` (exemplo com SQL Server no mesmo host):
 ```yaml
 services:
   db-backup:
-    image: lucianoscastro/mongo-backup:latest
+    image: lucianoscastro/db-backup:latest
     container_name: db-backup
     restart: unless-stopped
     env_file: .env
@@ -142,7 +142,7 @@ Um driver novo é um script em `scripts/drivers/<engine>.sh` implementando 4 sub
 
 ## Comandos (CLI, sem UI)
 
-Prefixe com `docker run --rm --env-file .env -v ./backups:/backups lucianoscastro/mongo-backup:latest`:
+Prefixe com `docker run --rm --env-file .env -v ./backups:/backups lucianoscastro/db-backup:latest`:
 
 ```bash
 backup                     # backup de todos os engines habilitados
