@@ -8,7 +8,12 @@ RUN_ON_START="${RUN_ON_START:-true}"
 # Aceita fração (0.5 = 30 min); o sleep precisa de segundos.
 to_seconds() { awk "BEGIN{printf \"%d\", $1 * $2}"; }
 
-case "${1:-daemon}" in
+case "${1:-serve}" in
+    # UI web + agendador no mesmo processo (binário Go). Modo padrão.
+    serve)
+        exec backupd
+        ;;
+    # Agendador sem UI web, para quem não quer expor porta nenhuma.
     daemon)
         interval=$(to_seconds "$INTERVAL_HOURS" 3600)
         retry=$(to_seconds "$RETRY_MINUTES" 60)
@@ -25,8 +30,8 @@ case "${1:-daemon}" in
             fi
         done
         ;;
-    backup)  exec backup.sh ;;
+    backup)  shift; exec backup.sh "$@" ;;
     restore) shift; exec restore.sh "$@" ;;
-    list)    find "${BACKUP_DIR:-/backups}" -name '*.tar' -exec ls -lh {} + ;;
+    list)    find "${BACKUP_DIR:-/backups}" -type f \( -name '*.tar' -o -name '*.bak' \) -exec ls -lh {} + ;;
     *)       exec "$@" ;;
 esac

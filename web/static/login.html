@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>db-backup — login</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+<main class="login-card">
+  <h1>db-backup</h1>
+  <p class="muted">Backup &amp; restore de bancos de dados</p>
+  <div id="err" class="error hidden"></div>
+  <form method="post" action="/login">
+    <label for="user">Usuário</label>
+    <input id="user" name="user" autocomplete="username" required autofocus>
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Entrar</button>
+  </form>
+</main>
+<script src="/static/login.js"></script>
+</body>
+</html>

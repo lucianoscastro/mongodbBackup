@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>db-backup</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>db-backup</h1>
+  <div class="header-right">
+    <span id="running-badge" class="badge badge-run hidden">job em execução…</span>
+    <form method="post" action="/logout"><button class="btn-ghost" type="submit">Sair</button></form>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>Servidores</h2>
+    <table id="engines">
+      <thead><tr><th>Engine</th><th>Host</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="actions">
+      <button id="backup-all">Backup de tudo agora</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Backups</h2>
+    <table id="backups">
+      <thead><tr><th>Engine</th><th>Base</th><th>Arquivo</th><th>Tamanho</th><th>Data</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="no-backups" class="muted hidden">Nenhum backup ainda.</p>
+  </section>
+
+  <section>
+    <h2>Jobs</h2>
+    <table id="jobs">
+      <thead><tr><th>#</th><th>Tipo</th><th>Status</th><th>Início</th><th>Fim</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="no-jobs" class="muted hidden">Nenhum job executado nesta sessão.</p>
+    <pre id="job-output" class="hidden"></pre>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

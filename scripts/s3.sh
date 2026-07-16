@@ -11,6 +11,7 @@ S3_MAX_PUT_BYTES=$((5 * 1024 * 1024 * 1024))
 # ausente derrubaria o ciclo no meio (backup parcial e silencioso).
 S3_ENABLED="${S3_ENABLED:-false}"
 S3_BUCKET="${S3_BUCKET:-}"
+S3_PREFIX="${S3_PREFIX:-}"
 S3_REGION="${S3_REGION:-us-east-1}"
 S3_ENDPOINT="${S3_ENDPOINT:-}"
 AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
@@ -18,6 +19,12 @@ AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
 
 s3_enabled() {
     [ "${S3_ENABLED,,}" = "true" ] && [ -n "$S3_BUCKET" ]
+}
+
+# Key completa a partir do caminho <engine>/<db>/<arquivo>. S3_PREFIX vazio
+# (padrão) mantém o layout antigo da imagem mongo-only: mongo/<db>/<arquivo>.
+s3_key() {
+    echo "${S3_PREFIX:+${S3_PREFIX}/}$1"
 }
 
 # Endpoint no estilo path (bucket na URL): funciona igual em AWS, MinIO e R2.

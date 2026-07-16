@@ -1,71 +1,157 @@
-# mongo-backup
+# db-backup
 
-Imagem Docker (~68 MB) que faz o backup periódico de **todas as bases de um cluster MongoDB**, guarda um arquivo por base e envia cada um para o S3.
+Imagem Docker que faz backup periódico de **MongoDB** e **SQL Server** (arquitetura pronta para outros bancos), com **UI web protegida por login** para listar servidores, listar backups, disparar backup e restaurar. Cada backup pode ser enviado para o **S3**.
 
-- **Um diretório por base**: `/backups/<base>/<base>_<timestamp>.tar`
+- **Drivers por engine**: `scripts/drivers/<engine>.sh` — um script novo = um banco novo, sem tocar no resto
+- **Um diretório por base**: `/backups/<engine>/<base>/<base>_<timestamp>.<ext>`
 - **Agendamento próprio**: roda a cada `INTERVAL_HOURS`, sem cron no host
+- **UI web opcional**: login com rate-limit, sessão assinada, um job por vez
 - **S3 opcional**: `S3_ENABLED=false` mantém só o backup local
-- **Restore** a partir do arquivo local ou direto do S3
+- **Restore** pelo UI, pelo arquivo local ou direto do S3
 
 ## Uso
 
 ```bash
-cp .env.example .env    # preencha MONGO_URI e, se quiser, o S3
+cp .env.example .env    # configure os engines, o S3 e a ADMIN_PASSWORD
 
-docker run -d --name mongo-backup \
+docker run -d --name db-backup \
   --restart unless-stopped \
   --env-file .env \
+  -p 8080:8080 \
   -v ./backups:/backups \
   lucianoscastro/mongo-backup:latest
 ```
 
-Ou, com um `docker-compose.yml`:
+A UI fica em `http://localhost:8080` (usuário `admin` por padrão). Para rodar **sem UI** (sem porta exposta), use o comando `daemon`:
+
+```bash
+docker run -d ... lucianoscastro/mongo-backup:latest daemon
+```
+
+Com `docker-compose.yml` (exemplo com SQL Server no mesmo host):
 
 ```yaml
 services:
-  mongo-backup:
+  db-backup:
     image: lucianoscastro/mongo-backup:latest
-    container_name: mongo-backup
+    container_name: db-backup
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "8080:8080"
     volumes:
       - ./backups:/backups
+      - mssql-backup:/mssql-backup   # mesmo volume do SQL Server (ver abaixo)
+    group_add:
+      - "10001"                      # gid do mssql: permite ler os .bak (modo 640)
     deploy:
       resources:
         limits:
           memory: 256m
           cpus: "0.5"
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_PASSWORD}"
+    volumes:
+      - mssql-data:/var/opt/mssql
+      - mssql-backup:/var/opt/mssql/backup
+
+volumes:
+  mssql-data:
+  mssql-backup:
 ```
 
-## Variáveis
+## Engines
+
+Um engine é habilitado quando suas variáveis obrigatórias estão definidas — configure um, outro ou os dois.
+
+### MongoDB
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `MONGO_URI` | — | **Obrigatória.** Cluster de origem |
-| `BACKUP_DIR` | `/backups` | Onde os arquivos são gravados (monte um volume aqui) |
+| `MONGO_URI` | — | Habilita o engine. Todas as bases do cluster são incluídas |
+| `EXCLUDE_DBS` | `admin config local` | Bases ignoradas |
+| `DUMP_TIMEOUT_MINUTES` | `60` | Aborta um dump travado. **Aumente se as bases forem grandes** |
+
+### SQL Server
+
+O `BACKUP DATABASE` do SQL Server é **sempre server-side**: o `.bak` nasce no disco do servidor. Por isso o diretório de backup do SQL Server precisa ser um volume montado **também neste container** (como no compose acima). O driver manda o servidor gravar o `.bak` lá, move o arquivo para `/backups` e segue o fluxo normal (S3 + retenção).
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `MSSQL_HOST` / `MSSQL_PASSWORD` | — | Habilitam o engine |
+| `MSSQL_PORT` | `1433` | |
+| `MSSQL_USER` | `sa` | Precisa de permissão de BACKUP/RESTORE |
+| `MSSQL_DATABASES` | *(vazio)* | Lista separada por espaço; vazio = todas as bases de usuário |
+| `MSSQL_EXCLUDE_DBS` | *(vazio)* | Bases ignoradas |
+| `MSSQL_DIR_SERVER` | `/var/opt/mssql/backup` | Diretório de backup **como o SQL Server o vê** |
+| `MSSQL_DIR_LOCAL` | `/mssql-backup` | O **mesmo volume**, montado neste container |
+| `MSSQL_COMPRESS` | `false` | `WITH COMPRESSION` — exige edição com suporte (não Express) |
+| `MSSQL_TIMEOUT_MINUTES` | `60` | Timeout de cada BACKUP/RESTORE |
+
+**Permissões do volume compartilhado** (uma vez, após criar os containers): o SQL Server roda como uid 10001 e cria os `.bak` com modo 640; este container roda como uid 1000.
+
+```bash
+# o diretório precisa aceitar escrita dos dois lados
+docker exec -u root <container-mssql> chmod 0777 /var/opt/mssql/backup
+# e este container precisa do grupo do mssql para ler os .bak (group_add acima,
+# ou --group-add 10001 no docker run)
+```
+
+> Restore assume o mesmo servidor (ou mesmo layout de disco): usa `WITH REPLACE`, sem `MOVE`.
+
+### Bancos futuros
+
+Um driver novo é um script em `scripts/drivers/<engine>.sh` implementando 4 subcomandos: `enabled`, `info`, `backup`, `restore <db> <arquivo>`. O agendador, a UI, o S3 e a retenção já funcionam sem mudança — o engine aparece na interface automaticamente.
+
+## UI web
+
+- **Login obrigatório**: `ADMIN_PASSWORD` (mín. 8 caracteres) precisa estar definida no modo `serve`; `ADMIN_USER` padrão `admin`
+- **Proteções**: comparação em tempo constante, 5 tentativas erradas = 15 min de bloqueio por IP, cookie `HttpOnly`+`SameSite=Strict` assinado (HMAC), verificação de `Origin` nos POSTs, CSP estrito
+- **Exposição**: o container serve HTTP puro — na internet, coloque atrás de um reverse proxy com HTTPS (o cookie `Secure` liga sozinho via `X-Forwarded-Proto`)
+- **Sessões**: defina `SESSION_SECRET` para o login sobreviver a restarts do container
+- **Jobs**: um por vez (backup agendado, backup manual e restore não concorrem); log de cada job visível na UI
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `ADMIN_PASSWORD` | — | **Obrigatória no modo serve** |
+| `ADMIN_USER` | `admin` | |
+| `WEB_PORT` | `8080` | |
+| `SESSION_TTL_HOURS` | `12` | Validade do login |
+| `SESSION_SECRET` | *(aleatório)* | Fixe para manter sessões entre restarts |
+| `COOKIE_SECURE` | `auto` | `auto` liga o cookie Secure atrás de HTTPS |
+
+## Agendamento, retenção e S3
+
+| Variável | Padrão | Descrição |
+|---|---|---|
 | `INTERVAL_HOURS` | `6` | Intervalo entre os backups. Aceita fração (`0.5` = 30 min) |
 | `MAX_BACKUPS` | `3` | Arquivos mantidos **por base** no disco local |
 | `RETRY_MINUTES` | `15` | Espera antes de tentar de novo, se o ciclo falhar |
 | `RUN_ON_START` | `true` | Faz um backup ao subir o container |
-| `DUMP_TIMEOUT_MINUTES` | `60` | Aborta um dump travado. **Aumente se as bases forem grandes** |
-| `EXCLUDE_DBS` | `admin config local` | Bases ignoradas |
+| `BACKUP_DIR` | `/backups` | Onde os arquivos são gravados (monte um volume aqui) |
 | `S3_ENABLED` | `false` | Liga o envio offsite |
 | `S3_BUCKET` | — | Bucket de destino |
-| `S3_PREFIX` | `mongo` | Prefixo das keys: `<prefix>/<base>/<arquivo>` |
+| `S3_PREFIX` | *(vazio)* | Keys: `<prefix>/<engine>/<base>/<arquivo>` |
 | `S3_REGION` | `us-east-1` | Região |
 | `S3_ENDPOINT` | — | Só para S3-compatíveis (MinIO, R2). Vazio = AWS |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Credencial do upload |
 
-## Comandos
+## Comandos (CLI, sem UI)
 
-Prefixe os comandos abaixo com `docker run --rm --env-file .env -v ./backups:/backups lucianoscastro/mongo-backup:latest`:
+Prefixe com `docker run --rm --env-file .env -v ./backups:/backups lucianoscastro/mongo-backup:latest`:
 
 ```bash
-backup             # backup avulso, fora do ciclo
-list               # lista os backups locais
-restore loja       # restaura do arquivo local mais recente
-restore loja --from-s3
-restore loja --drop # apaga as coleções antes de restaurar
+backup                     # backup de todos os engines habilitados
+backup mongo               # só um engine
+list                       # lista os backups locais
+restore mongo loja         # restaura do arquivo local mais recente
+restore mongo loja --from-s3
+restore mongo loja --drop  # (mongo) apaga as coleções antes de restaurar
+restore mssql vendas       # SQL Server: sempre WITH REPLACE
 ```
 
 ## Segurança: a credencial do backup não deveria conseguir restaurar
@@ -76,7 +162,7 @@ A recomendação é dar ao container uma credencial IAM **só com `s3:PutObject`
 {
   "Effect": "Allow",
   "Action": "s3:PutObject",
-  "Resource": "arn:aws:s3:::MEU-BUCKET/mongo/*"
+  "Resource": "arn:aws:s3:::MEU-BUCKET/*"
 }
 ```
 
@@ -86,10 +172,22 @@ Com `PutObject` apenas, a retenção remota é responsabilidade da **lifecycle p
 
 ## Como funciona
 
-O `mongodump` roda uma vez por ciclo sem `--db`, o que já descobre e dumpa todas as bases do cluster; cada base sai como um `.tar` próprio. É por isso que a imagem não precisa do `mongosh` (Node.js, ~200 MB, que só serviria para listar as bases) nem do `aws-cli`/`mc` — o upload é `curl --aws-sigv4`.
+- O **mongodump** roda uma vez por ciclo sem `--db`, o que já descobre e dumpa todas as bases; cada base sai como um `.tar` próprio. A imagem não precisa do `mongosh` (Node.js, ~200 MB) nem do `aws-cli` — o upload é `curl --aws-sigv4`.
+- O **sqlcmd** é o [go-sqlcmd](https://github.com/microsoft/go-sqlcmd) da Microsoft (binário estático, o único que roda em Alpine). O `BACKUP DATABASE ... WITH INIT, FORMAT, CHECKSUM` gera o `.bak` no volume compartilhado e o driver o move para `/backups`.
+- A **UI web** é um binário Go (stdlib, sem dependências) que só executa os mesmos scripts da CLI — a lógica de backup vive nos scripts, sempre.
 
 Limites conhecidos:
 
-- O upload usa PUT simples: **teto de 5 GB por base**. Acima disso o backup local continua, mas o envio falha com erro explícito (seria preciso multipart).
-- O dump vai para um diretório temporário antes de virar `.tar`, então o pico de disco é ~2× o tamanho do dump comprimido.
+- O upload usa PUT simples: **teto de 5 GB por arquivo**. Acima disso o backup local continua, mas o envio falha com erro explícito (seria preciso multipart).
+- O dump do Mongo vai para um diretório temporário antes de virar `.tar`, então o pico de disco é ~2× o tamanho do dump comprimido.
 - A retenção local só apaga o arquivo antigo **depois** que o novo foi gravado e validado.
+
+### Migrando da imagem mongo-only
+
+O layout local mudou de `/backups/<base>/` para `/backups/<engine>/<base>/`:
+
+```bash
+mkdir -p backups/mongo && mv backups/<base> backups/mongo/
+```
+
+No S3 nada muda se você usava o `S3_PREFIX=mongo` padrão antigo — o prefixo agora é vazio e o engine (`mongo/`) entra no lugar. A CLI de restore ganhou o engine como primeiro argumento (`restore mongo loja` em vez de `restore loja`).

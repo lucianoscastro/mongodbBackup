@@ -1,0 +1,118 @@
+// backupd: UI web + agendador de backups num único processo.
+//
+// O binário não sabe fazer backup de nada — ele só executa os mesmos scripts
+// da imagem (backup.sh, restore.sh, drivers/*.sh), que continuam funcionando
+// sozinhos via CLI. Manter os scripts como única fonte da lógica de backup é o
+// que deixa a UI opcional e os engines futuros plugáveis.
+package main
+
+import (
+	"crypto/rand"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type config struct {
+	port          string
+	adminUser     string
+	adminPassword string
+	sessionTTL    time.Duration
+	cookieSecure  string // "auto" | "true" | "false"
+	backupDir     string
+	driversDir    string
+	scriptsDir    string
+	interval      time.Duration
+	retry         time.Duration
+	runOnStart    bool
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func envFloat(key string, def float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		log.Fatalf("[Config] %s inválido: %q", key, v)
+	}
+	return f
+}
+
+func loadConfig() config {
+	pw := os.Getenv("ADMIN_PASSWORD")
+	if pw == "" {
+		log.Fatal("[Config] ADMIN_PASSWORD não definida. A UI web exige senha; " +
+			"defina ADMIN_PASSWORD ou rode o container no modo 'daemon' (sem web).")
+	}
+	if len(pw) < 8 {
+		log.Fatal("[Config] ADMIN_PASSWORD precisa ter pelo menos 8 caracteres.")
+	}
+	return config{
+		port:          envOr("WEB_PORT", "8080"),
+		adminUser:     envOr("ADMIN_USER", "admin"),
+		adminPassword: pw,
+		sessionTTL:    time.Duration(envFloat("SESSION_TTL_HOURS", 12) * float64(time.Hour)),
+		cookieSecure:  envOr("COOKIE_SECURE", "auto"),
+		backupDir:     envOr("BACKUP_DIR", "/backups"),
+		driversDir:    envOr("DRIVERS_DIR", "/usr/local/bin/drivers"),
+		scriptsDir:    envOr("SCRIPTS_DIR", "/usr/local/bin"),
+		interval:      time.Duration(envFloat("INTERVAL_HOURS", 6) * float64(time.Hour)),
+		retry:         time.Duration(envFloat("RETRY_MINUTES", 15) * float64(time.Minute)),
+		runOnStart:    strings.EqualFold(envOr("RUN_ON_START", "true"), "true"),
+	}
+}
+
+func sessionSecret() []byte {
+	if s := os.Getenv("SESSION_SECRET"); s != "" {
+		return []byte(s)
+	}
+	// Sem SESSION_SECRET as sessões caem a cada restart do container —
+	// aceitável para um único admin.
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("[Config] falha ao gerar segredo de sessão: %v", err)
+	}
+	return b
+}
+
+// Mesmo ciclo do modo daemon do entrypoint: roda, espera o intervalo,
+// e encurta a espera quando o ciclo falha.
+func (s *server) scheduler() {
+	if !s.cfg.runOnStart {
+		time.Sleep(s.cfg.interval)
+	}
+	for {
+		job, err := s.jobs.start("backup agendado", s.backupCmd(""))
+		if err != nil {
+			// um job manual está rodando; tenta de novo mais tarde
+			time.Sleep(s.cfg.retry)
+			continue
+		}
+		<-job.done
+		if job.ok() {
+			time.Sleep(s.cfg.interval)
+		} else {
+			log.Printf("[Agendador] ciclo falhou; nova tentativa em %s", s.cfg.retry)
+			time.Sleep(s.cfg.retry)
+		}
+	}
+}
+
+func main() {
+	cfg := loadConfig()
+	srv := newServer(cfg, sessionSecret(), newJobManager())
+	go srv.scheduler()
+	log.Printf("[Web] UI em :%s (usuário %s); backup a cada %s", cfg.port, cfg.adminUser, cfg.interval)
+	log.Fatal(http.ListenAndServe(":"+cfg.port, srv.routes()))
+}

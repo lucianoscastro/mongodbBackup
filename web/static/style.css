@@ -1,0 +1,144 @@
+:root {
+  --bg: #0f1419;
+  --panel: #171e26;
+  --border: #2a3440;
+  --text: #d8dee6;
+  --muted: #7d8894;
+  --accent: #3b82f6;
+  --ok: #22c55e;
+  --err: #ef4444;
+  --warn: #eab308;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+header h1 { font-size: 1.1rem; margin: 0; }
+
+.header-right { display: flex; gap: 0.75rem; align-items: center; }
+
+main { max-width: 60rem; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-top: 1.25rem;
+}
+
+h2 { font-size: 0.95rem; margin: 0 0 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+table { width: 100%; border-collapse: collapse; }
+
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
+
+th { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+
+tbody tr:last-child td { border-bottom: none; }
+
+.mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+
+.muted { color: var(--muted); }
+
+.hidden { display: none; }
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+button:hover { filter: brightness(1.15); }
+
+.btn-danger { background: #7f1d1d; }
+
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+
+.actions { margin-top: 0.9rem; }
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+}
+
+.badge-ok { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+.badge-err { background: rgba(239, 68, 68, 0.15); color: var(--err); }
+.badge-run { background: rgba(234, 179, 8, 0.15); color: var(--warn); }
+.badge-idle { background: rgba(125, 136, 148, 0.15); color: var(--muted); }
+
+pre#job-output {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.9rem;
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* --- login --- */
+
+.login-body { display: grid; place-items: center; min-height: 100vh; }
+
+.login-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2rem;
+  width: min(22rem, 90vw);
+}
+
+.login-card h1 { margin: 0; font-size: 1.3rem; }
+
+.login-card p { margin-top: 0.25rem; }
+
+.login-card form { display: grid; gap: 0.5rem; margin-top: 1.25rem; }
+
+.login-card label { font-size: 0.85rem; color: var(--muted); }
+
+.login-card input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.95rem;
+}
+
+.login-card input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+.login-card button { margin-top: 0.75rem; padding: 0.6rem; }
+
+.error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: var(--err);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
