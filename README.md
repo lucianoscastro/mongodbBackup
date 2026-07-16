@@ -173,7 +173,7 @@ Com `PutObject` apenas, a retenção remota é responsabilidade da **lifecycle p
 ## Como funciona
 
 - O **mongodump** roda uma vez por ciclo sem `--db`, o que já descobre e dumpa todas as bases; cada base sai como um `.tar` próprio. A imagem não precisa do `mongosh` (Node.js, ~200 MB) nem do `aws-cli` — o upload é `curl --aws-sigv4`.
-- O **sqlcmd** é o [go-sqlcmd](https://github.com/microsoft/go-sqlcmd) da Microsoft (binário estático, o único que roda em Alpine). O `BACKUP DATABASE ... WITH INIT, FORMAT, CHECKSUM` gera o `.bak` no volume compartilhado e o driver o move para `/backups`.
+- O SQL Server é acessado pelo **sqlrun**, um executor T-SQL mínimo do próprio projeto (`web/sqlrun`, ~150 linhas sobre o driver oficial [go-mssqldb](https://github.com/microsoft/go-mssqldb)). Ele substitui o go-sqlcmd da Microsoft, que embutia cliente Docker, SSH e SDK Azure — dezenas de CVEs de código que nunca seria executado aqui. O `BACKUP DATABASE ... WITH INIT, FORMAT, CHECKSUM` gera o `.bak` no volume compartilhado e o driver o move para `/backups`.
 - A **UI web** é um binário Go (stdlib, sem dependências) que só executa os mesmos scripts da CLI — a lógica de backup vive nos scripts, sempre.
 
 Limites conhecidos:

@@ -37,14 +37,15 @@ info() {
     echo "${MSSQL_HOST}:${MSSQL_PORT}"
 }
 
-# Senha via SQLCMDPASSWORD para não aparecer na linha de comando (ps/proc).
-# -C confia no certificado do servidor (o container não tem a CA dele);
-# -b faz o sqlcmd sair com erro quando o T-SQL falha.
+# sqlrun é o nosso executor T-SQL (web/sqlrun): substitui o go-sqlcmd, que
+# embutia dezenas de CVEs de dependências que nunca usamos. Ele lê a conexão
+# do ambiente — a senha nunca passa pela linha de comando (ps/proc) — e sai
+# com código != 0 quando o batch falha.
 sql() {
     local limit
     limit=$(awk "BEGIN{printf \"%d\", $MSSQL_TIMEOUT_MINUTES * 60}")
-    SQLCMDPASSWORD="$MSSQL_PASSWORD" sqlcmd -S "tcp:${MSSQL_HOST},${MSSQL_PORT}" \
-        -U "$MSSQL_USER" -C -b -h -1 -W -t "$limit" -Q "$1"
+    MSSQL_HOST="$MSSQL_HOST" MSSQL_PORT="$MSSQL_PORT" MSSQL_USER="$MSSQL_USER" \
+        MSSQL_PASSWORD="$MSSQL_PASSWORD" sqlrun -t "$limit" -Q "$1"
 }
 
 list_dbs() {

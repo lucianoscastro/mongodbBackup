@@ -1,9 +1,11 @@
-# Estágio 1: UI web + agendador (backupd). Binário estático, sem CGO —
-# a lógica de backup continua toda nos scripts; o Go só orquestra e serve a UI.
+# Estágio 1: UI web + agendador (backupd) e executor T-SQL (sqlrun).
+# Binários estáticos, sem CGO — a lógica de backup continua toda nos scripts;
+# o Go só orquestra, serve a UI e fala TDS com o SQL Server.
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY web/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/backupd .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/backupd . \
+ && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/sqlrun ./sqlrun
 
 FROM alpine:3.22
 
@@ -16,21 +18,7 @@ RUN apk add --no-cache mongodb-tools bash curl ca-certificates tzdata \
           /usr/bin/mongostat /usr/bin/mongotop /usr/bin/bsondump \
  && mongodump --version | head -1
 
-# sqlcmd da Microsoft (go-sqlcmd): binário Go estático — é o único sqlcmd que
-# roda em Alpine, o mssql-tools oficial exige glibc.
-ARG SQLCMD_VERSION=v1.10.0
-RUN apk add --no-cache --virtual .fetch bzip2 \
- && case "$(apk --print-arch)" in \
-        x86_64) arch=amd64 ;; \
-        aarch64) arch=arm64 ;; \
-        *) echo "arquitetura sem build do sqlcmd: $(apk --print-arch)" >&2; exit 1 ;; \
-    esac \
- && curl -fsSL "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${arch}.tar.bz2" \
-    | tar -xjf - -C /usr/local/bin sqlcmd \
- && apk del .fetch \
- && sqlcmd --version
-
-COPY --from=build /out/backupd /usr/local/bin/backupd
+COPY --from=build /out/backupd /out/sqlrun /usr/local/bin/
 COPY scripts/ /usr/local/bin/
 RUN chmod +x /usr/local/bin/*.sh /usr/local/bin/drivers/*.sh
 
