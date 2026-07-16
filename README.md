@@ -44,6 +44,17 @@ services:
       - mssql-backup:/mssql-backup   # mesmo volume do SQL Server (ver abaixo)
     group_add:
       - "10001"                      # gid do mssql: permite ler os .bak (modo 640)
+    # Hardening (opcional, mas recomendado): rootfs imutável e sem escalação.
+    # O staging do mongodump usa /tmp — com read_only ele vira tmpfs (RAM) e
+    # conta no limite de memória. Para bases grandes, troque o tmpfs por um
+    # diretório de disco (ex.: ./tmp:/tmp) e ajuste os limites.
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -173,6 +184,7 @@ Com `PutObject` apenas, a retenção remota é responsabilidade da **lifecycle p
 ## Como funciona
 
 - O **mongodump** roda uma vez por ciclo sem `--db`, o que já descobre e dumpa todas as bases; cada base sai como um `.tar` próprio. A imagem não precisa do `mongosh` (Node.js, ~200 MB) nem do `aws-cli` — o upload é `curl --aws-sigv4`.
+- O `mongodump`/`mongorestore` são **compilados do fonte upstream** ([mongo-tools](https://github.com/mongodb/mongo-tools) 100.17.0) no build da imagem, com toolchain Go e `x/crypto`/`x/net` atuais — o pacote pré-compilado da distro carregava dezenas de CVEs de dependências defasadas.
 - O SQL Server é acessado pelo **sqlrun**, um executor T-SQL mínimo do próprio projeto (`web/sqlrun`, ~150 linhas sobre o driver oficial [go-mssqldb](https://github.com/microsoft/go-mssqldb)). Ele substitui o go-sqlcmd da Microsoft, que embutia cliente Docker, SSH e SDK Azure — dezenas de CVEs de código que nunca seria executado aqui. O `BACKUP DATABASE ... WITH INIT, FORMAT, CHECKSUM` gera o `.bak` no volume compartilhado e o driver o move para `/backups`.
 - A **UI web** é um binário Go (stdlib, sem dependências) que só executa os mesmos scripts da CLI — a lógica de backup vive nos scripts, sempre.
 
