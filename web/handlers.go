@@ -106,7 +106,10 @@ func (s *server) headers(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
+		// same-origin (não no-referrer): a spec do Fetch força Origin: null em
+		// requests não-GET/HEAD quando a referrer policy é "no-referrer", o que
+		// quebrava a checagem de CSRF em login mesmo em navegação legítima.
+		h.Set("Referrer-Policy", "same-origin")
 		// 'self' estrito: nada inline, nada externo — todo JS/CSS vem de /static
 		h.Set("Content-Security-Policy", "default-src 'self'")
 		next.ServeHTTP(w, r)
