@@ -124,7 +124,7 @@ func (s *server) auth(next http.HandlerFunc) http.HandlerFunc {
 			}
 			return
 		}
-		if r.Method != http.MethodGet && !sameOrigin(r) {
+		if r.Method != http.MethodGet && !s.sameOrigin(r) {
 			http.Error(w, "origem inválida", http.StatusForbidden)
 			return
 		}
@@ -133,14 +133,15 @@ func (s *server) auth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // Anti-CSRF (além do SameSite=Strict do cookie): se o navegador mandou
-// Origin, ele precisa bater com o Host. Sem Origin (curl) passa.
+// Origin, ele precisa bater com o Host — ou com PUBLIC_URL, quando configurada.
 //
 // ponytail: NÃO comparar com X-Forwarded-Host — esse header vem do cliente
 // (fetch() pode setá-lo livremente, ao contrário de Origin) e um atacante
 // cross-origin o forjaria igual ao próprio Origin dele, driblando a checagem.
-// Atrás de reverse proxy, configure-o para repassar o Host original
-// (ex.: `proxy_set_header Host $host;`) — assim r.Host já chega correto.
-func sameOrigin(r *http.Request) bool {
+// Quando um reverse proxy não repassa o Host original intacto, o admin
+// declara o domínio público via PUBLIC_URL (env do container, não do
+// cliente) em vez de a gente confiar em qualquer header da requisição.
+func (s *server) sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
@@ -149,17 +150,16 @@ func sameOrigin(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-
-	originHost := u.Host
-	if h, _, err := net.SplitHostPort(originHost); err == nil {
-		originHost = h
-	}
+	originHost := u.Hostname()
 
 	reqHost := r.Host
 	if h, _, err := net.SplitHostPort(reqHost); err == nil {
 		reqHost = h
 	}
-	return originHost == reqHost
+	if originHost == reqHost {
+		return true
+	}
+	return s.cfg.publicHost != "" && originHost == s.cfg.publicHost
 }
 
 func clientIP(r *http.Request) string {
@@ -180,7 +180,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 // --- login/logout ---
 
 func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
+	if !s.sameOrigin(r) {
 		http.Error(w, "origem inválida", http.StatusForbidden)
 		return
 	}

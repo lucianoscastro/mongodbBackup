@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ type config struct {
 	interval      time.Duration
 	retry         time.Duration
 	runOnStart    bool
+	publicHost    string // de PUBLIC_URL; vazio = só r.Host é aceito como Origin
 }
 
 func envOr(key, def string) string {
@@ -70,7 +72,26 @@ func loadConfig() config {
 		interval:      time.Duration(envFloat("INTERVAL_HOURS", 6) * float64(time.Hour)),
 		retry:         time.Duration(envFloat("RETRY_MINUTES", 15) * float64(time.Minute)),
 		runOnStart:    strings.EqualFold(envOr("RUN_ON_START", "true"), "true"),
+		publicHost:    publicHost(),
 	}
+}
+
+// PUBLIC_URL é o único jeito são de aceitar um Origin diferente de r.Host: é
+// o admin, dono do env do container, quem declara o domínio público — nunca
+// um header vindo do próprio cliente HTTP. Necessário quando um reverse proxy
+// (Cloudflare, nginx, Traefik...) na frente do container não repassa o Host
+// original intacto (ex.: nginx sem `proxy_set_header Host $host;`), o que faz
+// r.Host chegar diferente do Origin que o navegador manda.
+func publicHost() string {
+	raw := os.Getenv("PUBLIC_URL")
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		log.Fatalf("[Config] PUBLIC_URL inválida: %q (esperado algo como https://backup.exemplo.com)", raw)
+	}
+	return u.Hostname()
 }
 
 func sessionSecret() []byte {

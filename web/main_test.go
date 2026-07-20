@@ -184,6 +184,39 @@ func TestCrossOriginPostIgnoresForwardedHostSpoof(t *testing.T) {
 	}
 }
 
+// Regressão: em produção, um reverse proxy que não repassa o Host original
+// intacto (ex.: nginx sem `proxy_set_header Host $host;`) faz r.Host chegar
+// diferente do Origin que o navegador manda, e a checagem de CSRF rejeitava
+// um login legítimo com "origem inválida". PUBLIC_URL existe para o admin
+// declarar o domínio público sem reabrir a brecha do X-Forwarded-Host.
+func TestPublicURLAcceptsConfiguredOrigin(t *testing.T) {
+	s := testServer(t)
+	s.cfg.publicHost = "backup.lzc.tec.br"
+	h := s.routes()
+	token := signToken(s.secret, "admin", time.Now().Add(time.Hour))
+
+	req := httptest.NewRequest("POST", "/api/backup", strings.NewReader(`{"engine":"all"}`))
+	req.Host = "internal-service:8080" // Host visto pelo Go atrás do proxy mal configurado
+	req.AddCookie(&http.Cookie{Name: "session", Value: token})
+	req.Header.Set("Origin", "https://backup.lzc.tec.br")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code == http.StatusForbidden {
+		t.Fatalf("Origin igual a PUBLIC_URL deveria passar mesmo com Host diferente, veio 403")
+	}
+
+	// Uma origem que não é nem o Host nem o PUBLIC_URL continua bloqueada.
+	req2 := httptest.NewRequest("POST", "/api/backup", strings.NewReader(`{"engine":"all"}`))
+	req2.Host = "internal-service:8080"
+	req2.AddCookie(&http.Cookie{Name: "session", Value: token})
+	req2.Header.Set("Origin", "https://malicioso.example.com")
+	w2 := httptest.NewRecorder()
+	h.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusForbidden {
+		t.Fatalf("Origin fora de Host e PUBLIC_URL: esperado 403, veio %d", w2.Code)
+	}
+}
+
 func TestRestoreRejectsTraversalAndUnknowns(t *testing.T) {
 	s := testServer(t)
 	h := s.routes()

@@ -134,6 +134,13 @@ Um driver novo é um script em `scripts/drivers/<engine>.sh` implementando 4 sub
 | `SESSION_TTL_HOURS` | `12` | Validade do login |
 | `SESSION_SECRET` | *(aleatório)* | Fixe para manter sessões entre restarts |
 | `COOKIE_SECURE` | `auto` | `auto` liga o cookie Secure atrás de HTTPS |
+| `PUBLIC_URL` | — | Domínio público, quando o reverse proxy não repassa o Host original (ver abaixo) |
+
+### "origem inválida" atrás de reverse proxy
+
+A UI compara o header `Origin` que o navegador manda com o `Host` que o container recebe, como proteção CSRF. Se o seu reverse proxy (Cloudflare, nginx, Traefik...) não repassar o `Host` original intacto para o container — por exemplo, nginx sem `proxy_set_header Host $host;` —, `Origin` e `Host` não batem e o login falha com **"origem inválida"**.
+
+O jeito certo de resolver é configurar o proxy para repassar o `Host` original. Se isso não for possível, defina `PUBLIC_URL` com o domínio público (ex.: `PUBLIC_URL=https://backup.exemplo.com`): é uma variável do ambiente do container, definida pelo admin, não um header da requisição — por isso não reabre brecha nenhuma de CSRF (ao contrário de confiar em `X-Forwarded-Host`, que um `fetch()` de outra origem poderia forjar).
 
 ## Agendamento, retenção e S3
 
