@@ -134,13 +134,32 @@ func (s *server) auth(next http.HandlerFunc) http.HandlerFunc {
 
 // Anti-CSRF (além do SameSite=Strict do cookie): se o navegador mandou
 // Origin, ele precisa bater com o Host. Sem Origin (curl) passa.
+//
+// ponytail: NÃO comparar com X-Forwarded-Host — esse header vem do cliente
+// (fetch() pode setá-lo livremente, ao contrário de Origin) e um atacante
+// cross-origin o forjaria igual ao próprio Origin dele, driblando a checagem.
+// Atrás de reverse proxy, configure-o para repassar o Host original
+// (ex.: `proxy_set_header Host $host;`) — assim r.Host já chega correto.
 func sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
 	}
 	u, err := url.Parse(origin)
-	return err == nil && u.Host == r.Host
+	if err != nil {
+		return false
+	}
+
+	originHost := u.Host
+	if h, _, err := net.SplitHostPort(originHost); err == nil {
+		originHost = h
+	}
+
+	reqHost := r.Host
+	if h, _, err := net.SplitHostPort(reqHost); err == nil {
+		reqHost = h
+	}
+	return originHost == reqHost
 }
 
 func clientIP(r *http.Request) string {

@@ -163,6 +163,27 @@ func TestCrossOriginPostIsRejected(t *testing.T) {
 	}
 }
 
+// Regressão: sameOrigin não pode confiar em X-Forwarded-Host. Diferente de
+// Origin (que o navegador define e o JS não sobrescreve), um fetch()
+// cross-origin pode setar esse header livremente — se ele fosse comparado
+// contra o Origin, um atacante forjaria os dois iguais e passaria pela
+// checagem de CSRF.
+func TestCrossOriginPostIgnoresForwardedHostSpoof(t *testing.T) {
+	s := testServer(t)
+	h := s.routes()
+	token := signToken(s.secret, "admin", time.Now().Add(time.Hour))
+
+	req := httptest.NewRequest("POST", "/api/backup", strings.NewReader(`{"engine":"all"}`))
+	req.AddCookie(&http.Cookie{Name: "session", Value: token})
+	req.Header.Set("Origin", "https://malicioso.example.com")
+	req.Header.Set("X-Forwarded-Host", "malicioso.example.com")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("POST cross-origin com X-Forwarded-Host forjado: esperado 403, veio %d", w.Code)
+	}
+}
+
 func TestRestoreRejectsTraversalAndUnknowns(t *testing.T) {
 	s := testServer(t)
 	h := s.routes()
